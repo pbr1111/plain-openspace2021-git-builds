@@ -1,0 +1,97 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+    exclude:
+      - README.md
+
+variables:
+  - name: Dockerfile
+    value: src/OpenSpace.Host/Dockerfile
+  - name: DockerTag
+    value: $(Build.BuildNumber)
+
+stages:
+- stage: CI
+  displayName: '👷 CI'
+  jobs:
+    - job: DockerImage
+      displayName: "🐳 Dockerize"
+      steps:
+        - task: Docker@2
+          displayName: '🤘 Build Project image'
+          inputs:
+            command: "build"
+            Dockerfile: "$(DockerFile)"
+            buildContext: "$(Build.SourcesDirectory)"
+            repository: "repository"
+            tags: $(DockerTag)
+          env:
+            DOCKER_BUILDKIT: 1
+
+        - task: Docker@2
+          displayName: '🤙 Save image to TAR'
+          inputs:
+            repository: 'repository'
+            command: save
+            arguments: '--output $(build.artifactstagingdirectory)/repository.image.tar repository:$(DockerTag)'
+            addPipelineData: false
+
+        - task: PublishBuildArtifacts@1
+          displayName: '👌 Publishing Image as Pipeline Artifact'
+          inputs:
+            PathtoPublish: "$(build.artifactstagingdirectory)"
+            ArtifactName: "ContainerImage"
+            publishLocation: "Container"
+
+- stage: DeployDEV
+  displayName: '🚀 Deploy DEV'
+  dependsOn: CI
+  condition: succeeded()
+  variables:   
+  #   - group: 'Group.Dev'
+    - name: ContainerRegistryName
+      value: 'openspace2021'
+    - name: "ContainerRegistryRepository"
+      value: "backend"
+  jobs:
+    - template: templates/deploy-image.yml
+      parameters:
+        environment: dev
+        containerServiceConnection: 'OpenSpaceACRDev'
+
+- stage: DeployQA
+  displayName: '💎 Deploy QA'
+  dependsOn: CI
+  condition: succeeded()
+  variables:   
+  #   - group: 'Group.QA'
+    - name: ContainerRegistryName
+      value: 'openspace2021'
+    - name: "ContainerRegistryRepository"
+      value: "backend-qa"
+  jobs:
+    - template: templates/deploy-image.yml
+      parameters:
+        environment: qa
+        containerServiceConnection: 'OpenSpaceACRDev'
+
+
+- stage: DeployPRO
+  displayName: '🏁 Deploy PRO'
+  dependsOn: CI
+  condition: succeeded()
+  variables:   
+  #   - group: 'Group.Pro'
+    - name: ContainerRegistryName
+      value: 'openspace2021'
+    - name: "ContainerRegistryRepository"
+      value: "backend-pro"
+  jobs:
+    - template: templates/deploy-image.yml
+      parameters:
+        environment: pro
+        containerServiceConnection: 'OpenSpaceACRDev'

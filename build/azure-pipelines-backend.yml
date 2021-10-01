@@ -1,0 +1,29 @@
+trigger: none
+
+pool:
+  vmImage: "ubuntu-latest"
+
+workspace:
+  clean: all
+variables:
+  buildConfiguration: "Release"
+steps:
+  - script: dotnet build --configuration $(buildConfiguration) src/OpenSpace.Host
+    displayName: "🤞 Build backend project"
+
+  - script: dotnet test test/OpenSpace.Test --logger "trx;LogFileName=testresults.trx" --collect "XPlat Code coverage"
+    displayName: "🧪 Run backend tests"
+    continueOnError: true
+
+  - task: PublishTestResults@2
+    displayName: "📝 Publish tests results"
+    inputs:
+      testRunner: VSTest
+      testResultsFiles: "**/*.trx"
+      failTaskOnFailedTests: true
+
+  - task: PublishCodeCoverageResults@1
+    displayName: "📝 Publish code coverage results"
+    inputs:
+      codeCoverageTool: "Cobertura"
+      summaryFileLocation: "$(Build.SourcesDirectory)/test/OpenSpace.Test/**/coverage.cobertura.xml"

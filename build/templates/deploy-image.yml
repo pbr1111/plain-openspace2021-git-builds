@@ -1,0 +1,52 @@
+parameters:
+- name: environment
+  type: string
+- name: containerServiceConnection
+  type: string
+
+jobs:
+- deployment: deploy${{parameters.environment}}
+  displayName: 'Deploy ${{parameters.environment}} environment'
+  pool:
+    vmImage: "ubuntu-latest"
+  environment: ${{parameters.environment}}
+  variables: 
+    - name: "DockerImageName"
+      value: "$(ContainerRegistryName).azurecr.io/$(ContainerRegistryRepository):$(DockerTag)"
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+          - checkout: none
+          - task: DownloadBuildArtifacts@0
+            displayName: '📥 Download docker image'
+            inputs:
+              buildType: "current"
+              downloadType: "single"
+              artifactName: "ContainerImage"
+              downloadPath: "$(System.ArtifactsDirectory)"
+              
+          - task: Docker@2
+            displayName: '⌛ Load Image from Tar'
+            inputs:
+              command: load
+              arguments: '--input $(System.ArtifactsDirectory)/ContainerImage/repository.image.tar'
+
+          - task: Docker@2
+            displayName: '🏷️ Retag Image with ACR Name'
+            inputs:
+              containerRegistry: ${{parameters.containerServiceConnection}}
+              repository: 'repository'
+              command: tag
+              arguments: 'repository:$(DockerTag) $(DockerImageName)'
+
+          - task: Docker@2
+            displayName: '📦 Push Image to ACR'
+            inputs:
+              containerRegistry: ${{parameters.containerServiceConnection}}
+              repository: "$(ContainerRegistryRepository)"
+              command: push
+              tags: $(DockerTag)
+
+          - script: echo "🚀 Deploy Image to Azure Web App"
+            displayName: '🚀 Deploy Image to Azure Web App'              
